@@ -1,0 +1,2367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CHRONICLES OF ELYNDRA — Open-World Action RPG</title>
+<style>
+  :root {
+    --gold: #e6c670;
+    --dark-bg: rgba(14, 19, 31, 0.88);
+    --panel-border: rgba(230, 198, 112, 0.45);
+    --gale: #4de6b0;
+    --flame: #ff6a3d;
+    --tide: #3da5ff;
+    --volt: #c45eff;
+    --frost: #8ceeff;
+    --terra: #e6b84d;
+  }
+  * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+  body, html { width: 100%; height: 100%; overflow: hidden; background: #070a12; color: #f0f4f8; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+  /* HUD OVERLAY */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 10; }
+  .hud-panel {
+    background: var(--dark-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
+
+  /* BOW AIMING RETICLE CROSSHAIR */
+  #aim-reticle {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 68px; height: 68px; display: none; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 18;
+  }
+  .reticle-ring {
+    position: absolute; width: 48px; height: 48px; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.65); transition: transform 0.08s, border-color 0.15s;
+  }
+  .reticle-charge {
+    position: absolute; width: 56px; height: 56px; border-radius: 50%;
+    border: 3px solid var(--flame); opacity: 0; transform: scale(1.3);
+  }
+  .reticle-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #fff;
+    box-shadow: 0 0 8px var(--flame);
+  }
+  .reticle-line { position: absolute; background: rgba(255,255,255,0.75); }
+  .reticle-line.h { width: 16px; height: 2px; }
+  .reticle-line.v { width: 2px; height: 16px; }
+  #aim-status-lbl {
+    position: absolute; top: 52px; font-size: 10px; font-weight: 800;
+    letter-spacing: 1px; color: var(--gold); text-shadow: 0 1px 3px #000; white-space: nowrap;
+  }
+
+  /* Top-Left: Minimap & Quest Tracker */
+  #top-left { position: absolute; top: 18px; left: 18px; display: flex; flex-direction: column; gap: 12px; width: 270px; }
+  #minimap-wrap {
+    width: 150px; height: 150px; border-radius: 50%; border: 3px solid var(--gold);
+    overflow: hidden; position: relative; background: #101b29; box-shadow: 0 0 20px rgba(0,0,0,0.7);
+  }
+  #minimap-canvas { width: 100%; height: 100%; display: block; }
+  #time-weather-badge {
+    position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.75); padding: 2px 10px; border-radius: 10px; font-size: 11px; color: var(--gold); white-space: nowrap;
+  }
+  #quest-tracker { padding: 12px 15px; border-left: 4px solid var(--gold); }
+  #quest-title { font-weight: 700; color: var(--gold); font-size: 14px; letter-spacing: 0.5px; margin-bottom: 4px; }
+  #quest-desc { font-size: 12.5px; color: #d8e2ef; line-height: 1.4; }
+  #quest-dist { font-size: 11px; color: #9ab0c7; margin-top: 4px; }
+
+  /* Top-Right: Menu Buttons */
+  #top-right { position: absolute; top: 18px; right: 18px; display: flex; gap: 10px; }
+  .icon-btn {
+    padding: 9px 14px; font-size: 12px; font-weight: 600; color: #fff; cursor: pointer;
+    transition: all 0.18s; display: flex; align-items: center; gap: 6px;
+  }
+  .icon-btn:hover { border-color: #fff; transform: translateY(-2px); background: rgba(230, 198, 112, 0.2); }
+  .key-hint { background: rgba(255,255,255,0.15); padding: 1px 6px; border-radius: 4px; font-size: 10px; color: var(--gold); }
+
+  /* Right Side: Party Portraits */
+  #party-bar { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 12px; }
+  .party-slot {
+    width: 210px; padding: 8px 12px; display: flex; align-items: center; gap: 10px;
+    cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden;
+  }
+  .party-slot.active {
+    border-color: #fff; transform: translateX(-10px);
+    background: linear-gradient(90deg, rgba(230,198,112,0.28), rgba(14,19,31,0.92));
+  }
+  .avatar-circle {
+    width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-weight: 800; font-size: 16px; color: #090d16; flex-shrink: 0;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.4);
+  }
+  .char-info { flex: 1; }
+  .char-name-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; }
+  .mini-hp-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+  .mini-hp-fill { height: 100%; background: #52e675; width: 100%; transition: width 0.2s; }
+
+  /* Bottom-Center: Player Health, Stamina & Level */
+  #bottom-center {
+    position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+    width: 390px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  #active-char-banner { font-size: 13px; font-weight: 700; color: var(--gold); text-shadow: 0 2px 4px #000; }
+  .bar-container {
+    width: 100%; height: 14px; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 7px; overflow: hidden; position: relative;
+  }
+  #hp-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #28b552, #6df092); transition: width 0.15s; }
+  #hp-bar-text { position: absolute; inset: 0; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-shadow: 0 1px 2px #000; }
+  #stamina-container { width: 75%; height: 8px; background: rgba(0,0,0,0.65); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); }
+  #stamina-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #f5b942, #ffea79); }
+
+  /* Bottom-Right: Action & Ability Controls */
+  #bottom-right { position: absolute; bottom: 22px; right: 22px; display: flex; align-items: flex-end; gap: 14px; }
+  .ability-btn {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--dark-bg);
+    border: 2px solid var(--panel-border); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; position: relative; color: #fff; cursor: pointer;
+    pointer-events: auto;
+  }
+  .ability-btn.ult { width: 76px; height: 76px; border-width: 3px; }
+  .ability-label { font-size: 11px; font-weight: 700; }
+  .ability-key { position: absolute; bottom: -8px; background: #1a2233; border: 1px solid var(--gold); color: var(--gold); font-size: 10px; padding: 1px 6px; border-radius: 6px; }
+  .cd-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.75); border-radius: 50%; display: none; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #ffcf5c; }
+
+  /* Center Interaction Prompt */
+  #interact-prompt {
+    position: absolute; top: 58%; left: 60%; transform: translate(-50%, -50%);
+    padding: 8px 18px; display: none; align-items: center; gap: 10px; font-weight: 600; font-size: 14px;
+    border-color: var(--gold); animation: pulseBorder 1.5s infinite;
+  }
+  @keyframes pulseBorder { 0%,100% { box-shadow: 0 0 8px rgba(230,198,112,0.3); } 50% { box-shadow: 0 0 18px rgba(230,198,112,0.75); } }
+
+  /* Boss Bar */
+  #boss-hud {
+    position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+    width: 540px; display: none; flex-direction: column; align-items: center; gap: 6px;
+  }
+  #boss-name { font-size: 18px; font-weight: 800; color: #ff6961; letter-spacing: 1px; text-shadow: 0 2px 8px #000; }
+  #boss-phase-tag { font-size: 12px; color: #d59bf6; font-weight: 600; }
+  #boss-hp-wrap { width: 100%; height: 18px; background: rgba(15,8,20,0.85); border: 2px solid #d59bf6; border-radius: 9px; overflow: hidden; }
+  #boss-hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #9932cc, #ff4560); transition: width 0.2s; }
+
+  /* Floating Damage & Reaction Layer */
+  #floating-layer { position: fixed; inset: 0; pointer-events: none; z-index: 15; overflow: hidden; }
+  .float-txt {
+    position: absolute; font-weight: 800; pointer-events: none;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.95); animation: floatUp 1.05s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translate(-50%, 0) scale(0.7); }
+    25% { transform: translate(-50%, -18px) scale(1.15); }
+    100% { opacity: 0; transform: translate(-50%, -55px) scale(0.95); }
+  }
+
+  /* Cinematic Main Menu */
+  #main-menu {
+    position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    background: radial-gradient(circle at center, rgba(10,16,32,0.35) 0%, rgba(5,8,16,0.88) 100%);
+  }
+  .game-logo {
+    font-size: 56px; font-weight: 900; letter-spacing: 6px; color: #fff;
+    text-shadow: 0 0 30px rgba(230,198,112,0.7), 0 4px 15px #000; margin-bottom: 6px; text-align: center;
+  }
+  .game-sub { font-size: 16px; color: var(--gold); letter-spacing: 4px; margin-bottom: 44px; text-transform: uppercase; }
+  .menu-btn {
+    width: 260px; padding: 14px 24px; margin: 7px 0; background: rgba(16, 24, 42, 0.85);
+    border: 1px solid var(--gold); border-radius: 8px; color: #fff; font-size: 15px;
+    font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: all 0.22s;
+  }
+  .menu-btn:hover { background: var(--gold); color: #090d16; transform: scale(1.04); box-shadow: 0 0 22px rgba(230,198,112,0.6); }
+
+  /* Modal Windows */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(6, 10, 18, 0.78); backdrop-filter: blur(8px);
+    z-index: 25; display: none; align-items: center; justify-content: center;
+  }
+  .modal-box {
+    width: min(860px, 92vw); max-height: 84vh; background: #101726; border: 2px solid var(--gold);
+    border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px #000;
+  }
+  .modal-header {
+    padding: 16px 24px; background: rgba(230,198,112,0.12); border-bottom: 1px solid var(--panel-border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-title { font-size: 20px; font-weight: 800; color: var(--gold); letter-spacing: 1px; }
+  .close-btn { background: none; border: 1px solid var(--gold); color: var(--gold); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-weight: 700; }
+  .modal-body { padding: 22px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card-item {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .action-btn {
+    background: var(--gold); color: #0a0f1d; border: none; padding: 6px 14px;
+    border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 12px;
+  }
+  .action-btn:hover { filter: brightness(1.12); }
+
+  /* Dialogue Box */
+  #dialogue-box {
+    position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+    width: min(720px, 90vw); padding: 20px 28px; z-index: 26; display: none;
+  }
+  #speaker-name { color: var(--gold); font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+  #dialogue-text { font-size: 14.5px; line-height: 1.5; color: #eef4fc; margin-bottom: 14px; }
+  #dialogue-next { float: right; }
+
+  /* Toast Banner */
+  #toast-banner {
+    position: fixed; top: 95px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(90deg, transparent, rgba(14,20,34,0.95), transparent);
+    border-top: 1px solid var(--gold); border-bottom: 1px solid var(--gold);
+    padding: 10px 44px; font-size: 16px; font-weight: 700; color: var(--gold);
+    z-index: 20; display: none; pointer-events: none; text-align: center;
+  }
+</style>
+<!-- Three.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body oncontextmenu="return false;">
+
+<!-- FLOATING DAMAGE & REACTION TEXT LAYER -->
+<div id="floating-layer"></div>
+
+<!-- TOAST NOTIFICATION -->
+<div id="toast-banner">REGION DISCOVERED: AERWYN VALE</div>
+
+<!-- MAIN TITLE SCREEN -->
+<div id="main-menu">
+  <div class="game-logo">ELYNDRA</div>
+  <div class="game-sub">Echoes of the Six Elements</div>
+  <button class="menu-btn" id="btn-new-game">START GAME</button>
+  <button class="menu-btn" id="btn-continue">CONTINUE SAVED GAME</button>
+  <button class="menu-btn" id="btn-settings-menu">SETTINGS</button>
+  <button class="menu-btn" id="btn-credits">CREDITS</button>
+  <div style="margin-top:26px; font-size:12px; color:#9ab0c7; text-align:center; line-height:1.7;">
+    <b>Controls:</b> WASD Move &bull; Shift Sprint &bull; Space Jump/Climb/Glide &bull; <b>1-4</b> Switch Character<br>
+    <b>Bow Aiming Mode (Lyra):</b> Press <b>R</b> or Hold <b>Right-Click</b> to Aim &bull; Hold <b>Left-Click</b> for Flame-Charged Arrow<br>
+    <b>E</b> Elemental Skill &bull; <b>Q</b> Ultimate &bull; <b>F</b> Interact
+  </div>
+</div>
+
+<!-- GAMEPLAY HUD -->
+<div id="hud">
+  <!-- Bow Aiming Reticle Crosshair -->
+  <div id="aim-reticle">
+    <div class="reticle-ring" id="reticle-ring"></div>
+    <div class="reticle-charge" id="reticle-charge"></div>
+    <div class="reticle-line h" style="left: 2px;"></div>
+    <div class="reticle-line h" style="right: 2px;"></div>
+    <div class="reticle-line v" style="top: 2px;"></div>
+    <div class="reticle-line v" style="bottom: 2px;"></div>
+    <div class="reticle-dot" id="reticle-dot"></div>
+    <div id="aim-status-lbl">AIM MODE [R / RMB]</div>
+  </div>
+
+  <div id="top-left">
+    <div id="minimap-wrap">
+      <canvas id="minimap-canvas" width="150" height="150"></canvas>
+      <div id="time-weather-badge">12:00 &bull; Clear</div>
+    </div>
+    <div class="hud-panel" id="quest-tracker">
+      <div id="quest-title">The Fallen Star</div>
+      <div id="quest-desc">Speak with Lumina by the Ancient Waystone.</div>
+      <div id="quest-dist">Distance: 12m</div>
+    </div>
+  </div>
+
+  <div id="top-right">
+    <div class="hud-panel icon-btn" onclick="UI.openModal('char-modal')">Characters <span class="key-hint">C</span></div>
+    <div class="hud-panel icon-btn" onclick="UI.openModal('inv-modal')">Inventory <span class="key-hint">I</span></div>
+    <div class="hud-panel icon-btn" onclick="GameSave.save(true)">Save <span class="key-hint">F5</span></div>
+    <div class="hud-panel icon-btn" onclick="UI.openModal('settings-modal')">Settings <span class="key-hint">ESC</span></div>
+  </div>
+
+  <!-- Boss Health Bar -->
+  <div id="boss-hud">
+    <div id="boss-name">STORMWING SERPENT — KORVAX</div>
+    <div id="boss-phase-tag">Phase 1: Grounded Tempest</div>
+    <div id="boss-hp-wrap"><div id="boss-hp-fill"></div></div>
+  </div>
+
+  <!-- Right Side Party Bar -->
+  <div id="party-bar"></div>
+
+  <!-- Center Interaction Prompt -->
+  <div class="hud-panel" id="interact-prompt"><span class="key-hint">F</span> <span id="interact-label">Interact</span></div>
+
+  <!-- Bottom Center Health & Stamina -->
+  <div id="bottom-center">
+    <div id="active-char-banner">Kael &bull; Lv. 1 (Gale)</div>
+    <div class="bar-container">
+      <div id="hp-bar-fill"></div>
+      <div id="hp-bar-text">1200 / 1200</div>
+    </div>
+    <div id="stamina-container"><div id="stamina-fill"></div></div>
+  </div>
+
+  <!-- Bottom Right Combat Controls -->
+  <div id="bottom-right">
+    <div class="ability-btn" id="btn-aim-toggle" style="display:none;" onclick="Player.toggleAimMode()">
+      <div class="ability-label">AIM</div>
+      <div class="ability-key">R/RMB</div>
+    </div>
+    <div class="ability-btn" onclick="Player.performAttack(false)">
+      <div class="ability-label">ATK</div>
+      <div class="ability-key">LMB</div>
+    </div>
+    <div class="ability-btn" id="btn-skill" onclick="Player.useSkill()">
+      <div class="ability-label" id="skill-name-lbl">Gale</div>
+      <div class="ability-key">E</div>
+      <div class="cd-overlay" id="skill-cd"></div>
+    </div>
+    <div class="ability-btn ult" id="btn-ult" onclick="Player.useUltimate()">
+      <div class="ability-label" id="ult-name-lbl">Tempest</div>
+      <div class="ability-key">Q</div>
+      <div class="cd-overlay" id="ult-cd"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOGUE OVERLAY -->
+<div class="hud-panel" id="dialogue-box">
+  <div id="speaker-name">Lumina</div>
+  <div id="dialogue-text">...</div>
+  <button class="action-btn" id="dialogue-next">Continue [F]</button>
+</div>
+
+<!-- CHARACTER PROGRESSION MODAL -->
+<div class="modal-backdrop" id="char-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">PARTY & ASCENSION</div>
+      <button class="close-btn" onclick="UI.closeModals()">CLOSE [ESC]</button>
+    </div>
+    <div class="modal-body" id="char-modal-content"></div>
+  </div>
+</div>
+
+<!-- INVENTORY & COOKING MODAL -->
+<div class="modal-backdrop" id="inv-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">INVENTORY & CULINARY ARTS</div>
+      <button class="close-btn" onclick="UI.closeModals()">CLOSE [ESC]</button>
+    </div>
+    <div class="modal-body" id="inv-modal-content"></div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal-box" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-title">SYSTEM SETTINGS</div>
+      <button class="close-btn" onclick="UI.closeModals()">CLOSE [ESC]</button>
+    </div>
+    <div class="modal-body" style="grid-template-columns:1fr;">
+      <div class="card-item">
+        <span>Master Audio Synthesizer</span>
+        <input type="range" id="vol-slider" min="0" max="100" value="70">
+      </div>
+      <div class="card-item">
+        <span>Camera Sensitivity</span>
+        <input type="range" id="sens-slider" min="1" max="10" value="5">
+      </div>
+      <div class="card-item">
+        <span>Weather Cycle Control</span>
+        <button class="action-btn" onclick="World.cycleWeather()">Cycle Weather</button>
+      </div>
+      <div class="card-item">
+        <span>Time of Day (+4 Hours)</span>
+        <button class="action-btn" onclick="World.timeOfDay = (World.timeOfDay + 4) % 24">Advance Time</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   1. PROCEDURAL WEB AUDIO SYNTHESIZER
+   ============================================================================ */
+const Sound = {
+  ctx: null,
+  volume: 0.7,
+  init() {
+    if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  },
+  playTone(freq, type = 'sine', duration = 0.18, gainVal = 0.15, slideFreq = null) {
+    if (!this.ctx || this.volume <= 0) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    if (slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+    gain.gain.setValueAtTime(gainVal * this.volume, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  },
+  sfxSlash() { this.playTone(340, 'triangle', 0.13, 0.22, 115); },
+  sfxBowLoose(charged) {
+    this.playTone(charged ? 640 : 480, 'sine', 0.16, 0.24, 190);
+    if (charged) setTimeout(() => this.playTone(320, 'sawtooth', 0.22, 0.18, 680), 40);
+  },
+  sfxOrbCast() { this.playTone(520, 'sine', 0.18, 0.18, 760); },
+  sfxSkill(el) {
+    const map = { Gale: [520, 880], Flame: [220, 440], Tide: [380, 620], Volt: [740, 290] };
+    const [f1, f2] = map[el] || [400, 600];
+    this.playTone(f1, 'sawtooth', 0.28, 0.2, f2);
+  },
+  sfxUlt() {
+    this.playTone(180, 'sawtooth', 0.55, 0.28, 720);
+    setTimeout(() => this.playTone(540, 'sine', 0.45, 0.25, 1080), 140);
+  },
+  sfxReaction() { this.playTone(660, 'square', 0.25, 0.22, 990); },
+  sfxChest() {
+    [440, 554, 659, 880].forEach((n, i) => setTimeout(() => this.playTone(n, 'triangle', 0.22, 0.2), i * 85));
+  }
+};
+
+/* ============================================================================
+   2. ELEMENTAL SYSTEM & REACTIONS
+   ============================================================================ */
+const ELEMENTS = {
+  Gale:  { color: '#4de6b0', hex: 0x4de6b0 },
+  Flame: { color: '#ff6a3d', hex: 0xff6a3d },
+  Tide:  { color: '#3da5ff', hex: 0x3da5ff },
+  Volt:  { color: '#c45eff', hex: 0xc45eff },
+  Frost: { color: '#8ceeff', hex: 0x8ceeff },
+  Terra: { color: '#e6b84d', hex: 0xe6b84d }
+};
+
+function checkElementalReaction(existingEl, incomingEl) {
+  if (!existingEl || existingEl === incomingEl) return null;
+  const pair = [existingEl, incomingEl].sort().join('+');
+  switch (pair) {
+    case 'Frost+Tide':  return { name: 'FREEZE', mult: 1.35, color: '#8ceeff', stun: 3.0 };
+    case 'Flame+Frost': return { name: 'MELT', mult: 2.0, color: '#ff944d' };
+    case 'Flame+Tide':  return { name: 'VAPOR BURST', mult: 1.75, color: '#66ccff' };
+    case 'Tide+Volt':   return { name: 'CONDUCT', mult: 1.45, color: '#d580ff', aoe: 6 };
+    case 'Flame+Terra': return { name: 'MAGMA BREAK', mult: 1.6, color: '#ffaa33', shield: true };
+    default:
+      if (existingEl === 'Gale' || incomingEl === 'Gale') {
+        return { name: 'ELEMENTAL SPREAD', mult: 1.4, color: '#4de6b0', aoe: 7 };
+      }
+      return { name: 'ELEMENTAL SURGE', mult: 1.25, color: '#ffffff' };
+  }
+}
+
+/* ============================================================================
+   3. PARTY CHARACTERS & PROGRESSION DATA
+   ============================================================================ */
+const PARTY = [
+  {
+    id: 'kael', name: 'Kael', element: 'Gale', weapon: 'Sword', role: 'Balanced DPS',
+    level: 1, exp: 0, hp: 1200, maxHp: 1200, atk: 115, energy: 100,
+    skillName: 'Cyclone Slash', skillCd: 5, skillTimer: 0,
+    ultName: 'Emerald Tempest', ultCost: 100,
+    color: 0x226b58, trimColor: 0x4de6b0, hairColor: 0x1b263b, eyeColor: 0x4de6b0
+  },
+  {
+    id: 'lyra', name: 'Lyra', element: 'Flame', weapon: 'Bow', role: 'Ranged Bow DPS',
+    level: 1, exp: 0, hp: 980, maxHp: 980, atk: 145, energy: 100,
+    skillName: 'Solar Volley', skillCd: 6, skillTimer: 0,
+    ultName: 'Phoenix Rain', ultCost: 100,
+    color: 0x8f2418, trimColor: 0xff6a3d, hairColor: 0xd94e34, eyeColor: 0xffb703
+  },
+  {
+    id: 'mira', name: 'Mira', element: 'Tide', weapon: 'Magic Focus', role: 'Ranged Healer',
+    level: 1, exp: 0, hp: 1350, maxHp: 1350, atk: 98, energy: 100,
+    skillName: 'Soothing Spring', skillCd: 7, skillTimer: 0,
+    ultName: 'Abyssal Sanctuary', ultCost: 100,
+    color: 0x1d4e89, trimColor: 0x3da5ff, hairColor: 0xa8dadc, eyeColor: 0x3da5ff
+  },
+  {
+    id: 'riven', name: 'Riven', element: 'Volt', weapon: 'Dual Blades', role: 'Fast Burst DPS',
+    level: 1, exp: 0, hp: 1050, maxHp: 1050, atk: 132, energy: 100,
+    skillName: 'Thunder Blink', skillCd: 4, skillTimer: 0,
+    ultName: 'Storm Overdrive', ultCost: 100,
+    color: 0x3c1b5c, trimColor: 0xc45eff, hairColor: 0xd8bfd8, eyeColor: 0xc45eff
+  }
+];
+
+const Inventory = {
+  gold: 500,
+  materials: {
+    'Aether Crystal': 6,
+    'Raw Meat': 4,
+    'Sunberry': 6,
+    'Glowshroom': 5
+  },
+  meals: {
+    'Roasted Skewer (+350 HP)': 3,
+    'Spiced Stew (+25% ATK 30s)': 2
+  }
+};
+
+/* ============================================================================
+   4. ARTICULATED ANIME HUMANOID CHARACTER & WEAPON RIG BUILDER
+   ============================================================================ */
+function createStylizedCharacterRig(charData) {
+  const root = new THREE.Group();
+  const hips = new THREE.Group();
+  hips.position.y = 1.05;
+  root.add(hips);
+
+  const mats = {
+    skin: new THREE.MeshToonMaterial({ color: 0xffe3cc }),
+    primary: new THREE.MeshToonMaterial({ color: charData.color }),
+    trim: new THREE.MeshPhongMaterial({ color: charData.trimColor, emissive: charData.trimColor, emissiveIntensity: 0.25, shininess: 80 }),
+    hair: new THREE.MeshToonMaterial({ color: charData.hairColor }),
+    dark: new THREE.MeshToonMaterial({ color: 0x1b1f2e }),
+    gold: new THREE.MeshPhongMaterial({ color: 0xf4d068, shininess: 90 }),
+    eye: new THREE.MeshBasicMaterial({ color: charData.eyeColor })
+  };
+
+  // --- TORSO & LAYERED TUNIC COAT ---
+  const torso = new THREE.Group();
+  hips.add(torso);
+
+  const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.56, 12), mats.primary);
+  chest.position.y = 0.28;
+  chest.scale.set(1.12, 1, 0.78);
+  chest.castShadow = true;
+  torso.add(chest);
+
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.035, 8, 16), mats.gold);
+  collar.rotation.x = Math.PI / 2;
+  collar.position.y = 0.54;
+  torso.add(collar);
+
+  const coreGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.075, 0), mats.trim);
+  coreGem.position.set(0, 0.36, 0.19);
+  torso.add(coreGem);
+
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.21, 0.09, 12), mats.gold);
+  belt.position.y = 0.03;
+  belt.scale.set(1.1, 1, 0.82);
+  torso.add(belt);
+
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.38, 0.44, 14, 1, true), mats.primary);
+  skirt.position.y = -0.18;
+  skirt.scale.set(1.08, 1, 0.84);
+  hips.add(skirt);
+
+  // --- HEAD, ANIME EYES, SPIKY HAIR & SWAYING PONYTAIL ---
+  const neck = new THREE.Group();
+  neck.position.y = 0.58;
+  torso.add(neck);
+
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.255, 20, 20), mats.skin);
+  headMesh.position.y = 0.22;
+  headMesh.scale.set(0.95, 1.04, 0.95);
+  headMesh.castShadow = true;
+  neck.add(headMesh);
+
+  const eyeGeo = new THREE.SphereGeometry(0.042, 10, 10);
+  const leftEye = new THREE.Mesh(eyeGeo, mats.eye);
+  leftEye.scale.set(0.85, 1.35, 0.5);
+  leftEye.position.set(0.085, 0.21, 0.225);
+
+  const rightEye = leftEye.clone();
+  rightEye.position.x = -0.085;
+
+  const pupilGeo = new THREE.SphereGeometry(0.018, 8, 8);
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const pL = new THREE.Mesh(pupilGeo, pupilMat);
+  pL.position.set(0.095, 0.23, 0.245);
+  const pR = pL.clone();
+  pR.position.x = -0.075;
+  neck.add(leftEye, rightEye, pL, pR);
+
+  const hairCap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.275, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    mats.hair
+  );
+  hairCap.position.y = 0.24;
+  hairCap.rotation.x = -0.18;
+  neck.add(hairCap);
+
+  const spikeGeo = new THREE.ConeGeometry(0.068, 0.25, 6);
+  const spikeConfigs = [
+    [0, 0.34, 0.22, 0.45, 0],
+    [0.11, 0.32, 0.20, 0.4, 0.28],
+    [-0.11, 0.32, 0.20, 0.4, -0.28],
+    [0.21, 0.22, 0.08, 0.15, 0.35],
+    [-0.21, 0.22, 0.08, 0.15, -0.35]
+  ];
+  spikeConfigs.forEach(([sx, sy, sz, rx, rz]) => {
+    const sp = new THREE.Mesh(spikeGeo, mats.hair);
+    sp.position.set(sx, sy, sz);
+    sp.rotation.set(rx, 0, rz);
+    neck.add(sp);
+  });
+
+  const ponytail = new THREE.Group();
+  ponytail.position.set(0, 0.18, -0.24);
+  const tailCone = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.58, 8), mats.hair);
+  tailCone.position.set(0, -0.24, -0.06);
+  tailCone.rotation.x = 2.75;
+  ponytail.add(tailCone);
+  neck.add(ponytail);
+
+  // --- FLOWING ELEMENTAL SCARF / CAPE TAILS ---
+  const scarfPivot = new THREE.Group();
+  scarfPivot.position.set(0, 0.52, -0.16);
+  torso.add(scarfPivot);
+
+  const scarfGeo = new THREE.BoxGeometry(0.16, 0.85, 0.025);
+  const scarfL = new THREE.Mesh(scarfGeo, mats.trim);
+  scarfL.position.set(0.13, -0.4, -0.04);
+  scarfL.rotation.z = 0.12;
+  const scarfR = new THREE.Mesh(scarfGeo, mats.trim);
+  scarfR.position.set(-0.13, -0.4, -0.04);
+  scarfR.rotation.z = -0.12;
+  scarfPivot.add(scarfL, scarfR);
+
+  // --- ARTICULATED ARMS ---
+  function buildArm(isLeft) {
+    const s = isLeft ? 1 : -1;
+    const shoulder = new THREE.Group();
+    shoulder.position.set(s * 0.31, 0.50, 0);
+
+    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), mats.gold);
+    pauldron.rotation.z = -s * 0.4;
+    shoulder.add(pauldron);
+
+    const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.058, 0.30, 10), mats.primary);
+    upperArm.position.y = -0.15;
+    shoulder.add(upperArm);
+
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.30;
+    shoulder.add(elbow);
+
+    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.048, 0.28, 10), mats.skin);
+    forearm.position.y = -0.14;
+    elbow.add(forearm);
+
+    const bracer = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.056, 0.14, 10), mats.gold);
+    bracer.position.y = -0.18;
+    elbow.add(bracer);
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.058, 10, 10), mats.skin);
+    hand.position.y = -0.29;
+    elbow.add(hand);
+
+    torso.add(shoulder);
+    return { shoulder, elbow, hand };
+  }
+
+  const leftArm = buildArm(true);
+  const rightArm = buildArm(false);
+
+  // --- UNIQUE 3D ELEMENTAL WEAPONS ---
+  const weapons = {};
+
+  // 1. Kael's Zephyr Rune Sword (Right Hand)
+  const swordGrp = new THREE.Group();
+  const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.22, 8), mats.dark);
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.07), mats.gold);
+  guard.position.y = 0.11;
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.92, 0.11), mats.trim);
+  blade.position.y = 0.58;
+  swordGrp.add(hilt, guard, blade);
+  swordGrp.rotation.x = Math.PI / 2;
+  swordGrp.position.set(0, -0.04, 0.08);
+  rightArm.hand.add(swordGrp);
+  weapons.kael = swordGrp;
+
+  // 2. Lyra's Solar Greatbow (Left Hand) + Glowing Drawn Arrow
+  const bowGrp = new THREE.Group();
+  const bowArc = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.028, 8, 22, Math.PI), mats.gold);
+  bowArc.rotation.z = -Math.PI / 2;
+  const bowString = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.90, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+
+  // Nocked Arrow (visible while drawing/aiming)
+  const nockedArrow = new THREE.Group();
+  const arrowShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.72, 6), mats.gold);
+  arrowShaft.rotation.x = Math.PI / 2;
+  arrowShaft.position.z = 0.22;
+  const arrowTip = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.16, 6), new THREE.MeshBasicMaterial({ color: 0xff6a3d }));
+  arrowTip.rotation.x = Math.PI / 2;
+  arrowTip.position.z = 0.60;
+  nockedArrow.add(arrowShaft, arrowTip);
+  nockedArrow.visible = false;
+
+  bowGrp.add(bowArc, bowString, nockedArrow);
+  bowGrp.position.set(0, -0.05, 0.12);
+  bowGrp.visible = false;
+  leftArm.hand.add(bowGrp);
+  weapons.lyra = bowGrp;
+  weapons.nockedArrow = nockedArrow;
+  weapons.arrowTip = arrowTip;
+
+  // 3. Mira's Floating Hydro Catalyst Focus (Orbits Right Hand)
+  const focusGrp = new THREE.Group();
+  const outerRing = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.018, 8, 24), mats.gold);
+  const waterCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), mats.trim);
+  focusGrp.add(outerRing, waterCrystal);
+  focusGrp.position.set(0, -0.12, 0.26);
+  focusGrp.visible = false;
+  rightArm.hand.add(focusGrp);
+  weapons.mira = focusGrp;
+
+  // 4. Riven's Twin Volt Blades (Both Hands)
+  const daggerR = new THREE.Group();
+  const dBlade = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.52, 4), mats.trim);
+  dBlade.position.y = 0.28;
+  daggerR.add(dBlade);
+  daggerR.rotation.x = Math.PI / 2;
+  daggerR.visible = false;
+  rightArm.hand.add(daggerR);
+
+  const daggerL = daggerR.clone();
+  leftArm.hand.add(daggerL);
+  weapons.riven = { r: daggerR, l: daggerL };
+
+  // --- ARTICULATED LEGS ---
+  function buildLeg(isLeft) {
+    const s = isLeft ? 1 : -1;
+    const hip = new THREE.Group();
+    hip.position.set(s * 0.13, -0.04, 0);
+
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.072, 0.44, 10), mats.dark);
+    thigh.position.y = -0.22;
+    hip.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -0.44;
+    hip.add(knee);
+
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.074, 0.062, 0.46, 10), mats.primary);
+    shin.position.y = -0.23;
+    knee.add(shin);
+
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.11, 0.24), mats.dark);
+    boot.position.set(0, -0.46, 0.04);
+    knee.add(boot);
+
+    hips.add(hip);
+    return { hip, knee };
+  }
+
+  const leftLeg = buildLeg(true);
+  const rightLeg = buildLeg(false);
+
+  // --- STYLIZED ENERGY GLIDER WINGS ---
+  const glider = new THREE.Group();
+  glider.position.set(0, 0.48, -0.18);
+  glider.visible = false;
+  const wingGeo = new THREE.ConeGeometry(0.45, 1.75, 4);
+  const wingMat = new THREE.MeshBasicMaterial({ color: 0x4de6b0, transparent: true, opacity: 0.82 });
+  const wingL = new THREE.Mesh(wingGeo, wingMat);
+  wingL.rotation.z = Math.PI / 2.2;
+  wingL.position.x = 0.85;
+  const wingR = new THREE.Mesh(wingGeo, wingMat);
+  wingR.rotation.z = -Math.PI / 2.2;
+  wingR.position.x = -0.85;
+  glider.add(wingL, wingR);
+  torso.add(glider);
+
+  return {
+    root, hips, torso, neck, ponytail, scarfPivot, glider,
+    leftArm, rightArm, leftLeg, rightLeg, weapons, mats,
+    animTime: 0, attackAnim: 0, attackStyle: 'melee',
+
+    applyCharacterTheme(ch) {
+      mats.primary.color.setHex(ch.color);
+      mats.trim.color.setHex(ch.trimColor);
+      mats.trim.emissive.setHex(ch.trimColor);
+      mats.hair.color.setHex(ch.hairColor);
+      mats.eye.color.setHex(ch.eyeColor);
+
+      weapons.kael.visible = (ch.id === 'kael');
+      weapons.lyra.visible = (ch.id === 'lyra');
+      weapons.mira.visible = (ch.id === 'mira');
+      weapons.riven.r.visible = (ch.id === 'riven');
+      weapons.riven.l.visible = (ch.id === 'riven');
+    },
+
+    updateAnimation(dt, state) {
+      this.animTime += dt * (state.sprinting ? 14 : (state.moving ? 9.5 : 2.4));
+
+      if (weapons.mira.visible) {
+        weapons.mira.rotation.y += dt * 3.5;
+        weapons.mira.rotation.x += dt * 2.0;
+      }
+
+      if (state.isGliding) {
+        torso.rotation.x = 0.55;
+        leftArm.shoulder.rotation.z = 1.25;
+        rightArm.shoulder.rotation.z = -1.25;
+        leftArm.shoulder.rotation.x = 0;
+        rightArm.shoulder.rotation.x = 0;
+        leftLeg.hip.rotation.x = -0.35;
+        rightLeg.hip.rotation.x = -0.45;
+        leftLeg.knee.rotation.x = 0.4;
+        rightLeg.knee.rotation.x = 0.5;
+      } else if (state.isClimbing) {
+        torso.rotation.x = -0.15;
+        const c = Math.sin(this.animTime * 1.3);
+        leftArm.shoulder.rotation.x = -2.2 + c * 0.55;
+        rightArm.shoulder.rotation.x = -2.2 - c * 0.55;
+        leftArm.shoulder.rotation.z = 0.15;
+        rightArm.shoulder.rotation.z = -0.15;
+        leftLeg.hip.rotation.x = -0.6 - c * 0.45;
+        rightLeg.hip.rotation.x = -0.6 + c * 0.45;
+        leftLeg.knee.rotation.x = 0.8;
+        rightLeg.knee.rotation.x = 0.8;
+      } else if (state.moving) {
+        const stride = state.isAiming ? 0.35 : (state.sprinting ? 0.85 : 0.55);
+        const wave = Math.sin(this.animTime);
+        hips.position.y = 1.05 + Math.abs(Math.cos(this.animTime)) * 0.055;
+        torso.rotation.x = state.sprinting ? 0.22 : 0.06;
+
+        leftLeg.hip.rotation.x = wave * stride;
+        rightLeg.hip.rotation.x = -wave * stride;
+        leftLeg.knee.rotation.x = Math.max(0, -wave * stride * 0.85);
+        rightLeg.knee.rotation.x = Math.max(0, wave * stride * 0.85);
+
+        leftArm.shoulder.rotation.x = -wave * stride * 0.9;
+        rightArm.shoulder.rotation.x = wave * stride * 0.9;
+        leftArm.shoulder.rotation.z = 0.12;
+        rightArm.shoulder.rotation.z = -0.12;
+        leftArm.elbow.rotation.x = -0.35;
+        rightArm.elbow.rotation.x = -0.35;
+      } else {
+        const breath = Math.sin(this.animTime);
+        hips.position.y = 1.05 + breath * 0.02;
+        torso.rotation.x = 0;
+        leftLeg.hip.rotation.x = 0;
+        rightLeg.hip.rotation.x = 0;
+        leftLeg.knee.rotation.x = 0.05;
+        rightLeg.knee.rotation.x = 0.05;
+
+        leftArm.shoulder.rotation.x = breath * 0.05;
+        rightArm.shoulder.rotation.x = -breath * 0.05;
+        leftArm.shoulder.rotation.z = 0.16 + breath * 0.03;
+        rightArm.shoulder.rotation.z = -0.16 - breath * 0.03;
+        leftArm.elbow.rotation.x = -0.18;
+        rightArm.elbow.rotation.x = -0.18;
+      }
+
+      // --- ARCHER AIMING POSE OR ATTACK ANIMATION OVERRIDE ---
+      if (state.isAiming && weapons.lyra.visible) {
+        weapons.nockedArrow.visible = true;
+        const chargeScale = 1 + state.bowCharge * 0.9;
+        weapons.arrowTip.scale.set(chargeScale, chargeScale, chargeScale);
+
+        // Left arm holds Solar Greatbow straight out toward target
+        leftArm.shoulder.rotation.x = -Math.PI / 2 + state.camPitch * 0.65;
+        leftArm.shoulder.rotation.z = -0.08;
+        leftArm.elbow.rotation.x = 0;
+        weapons.lyra.rotation.y = Math.PI / 2;
+
+        // Right arm pulls bowstring back to cheek
+        rightArm.shoulder.rotation.x = -Math.PI / 2 + state.camPitch * 0.65;
+        rightArm.shoulder.rotation.z = -0.45;
+        rightArm.elbow.rotation.x = -1.25 - state.bowCharge * 0.35;
+        torso.rotation.y = 0.28;
+      } else {
+        weapons.nockedArrow.visible = false;
+        weapons.lyra.rotation.y = 0;
+
+        if (this.attackAnim > 0) {
+          this.attackAnim = Math.max(0, this.attackAnim - dt * 4.5);
+          const p = 1 - this.attackAnim;
+
+          if (this.attackStyle === 'bow') {
+            // Quick Archer Bow Shot Pose
+            leftArm.shoulder.rotation.x = -1.45;
+            leftArm.elbow.rotation.x = 0;
+            rightArm.shoulder.rotation.x = -1.45;
+            rightArm.elbow.rotation.x = -Math.sin(p * Math.PI) * 1.4;
+            torso.rotation.y = 0.25;
+          } else if (this.attackStyle === 'magic') {
+            // Catalyst Forward Palm Cast
+            rightArm.shoulder.rotation.x = -1.6 * Math.sin(p * Math.PI);
+            leftArm.shoulder.rotation.x = -1.2 * Math.sin(p * Math.PI);
+            torso.rotation.y = Math.sin(p * Math.PI) * 0.25;
+          } else {
+            // Melee Sword / Dual-Blade Slash
+            const swing = Math.sin(p * Math.PI);
+            rightArm.shoulder.rotation.x = -1.9 + swing * 2.8;
+            rightArm.shoulder.rotation.z = -0.35;
+            leftArm.shoulder.rotation.x = -0.8 * swing;
+            torso.rotation.y = Math.sin(p * Math.PI * 2) * 0.45;
+          }
+        } else {
+          torso.rotation.y = 0;
+        }
+      }
+
+      const spdBoost = state.sprinting ? 0.65 : (state.moving ? 0.35 : 0.08);
+      scarfPivot.rotation.x = 0.18 + spdBoost + Math.sin(this.animTime * 1.4) * 0.12;
+      ponytail.rotation.x = spdBoost * 0.8 + Math.cos(this.animTime * 1.2) * 0.1;
+    }
+  };
+}
+
+/* ============================================================================
+   5. WORLD, PROJECTILES & THREE.JS SCENE ARCHITECTURE
+   ============================================================================ */
+const World = {
+  scene: null, camera: null, renderer: null,
+  sunLight: null, ambientLight: null,
+  timeOfDay: 10.5,
+  weather: 'Clear',
+  rainSystem: null,
+  colliders: [],
+  interactables: [],
+  enemies: [],
+  projectiles: [], // Live 3D arrows & magic orbs
+  torchesLit: 0,
+  puzzleSolved: false,
+  boss: null,
+
+  getTerrainHeight(x, z) {
+    const distFromCenter = Math.hypot(x, z);
+    if (distFromCenter < 26) return 0;
+    if (Math.hypot(x, z + 145) < 34) return 2.0;
+    const h = Math.sin(x * 0.035) * Math.cos(z * 0.035) * 5.5
+            + Math.sin(x * 0.09 + z * 0.07) * 1.4;
+    return Math.max(-1.8, h);
+  },
+
+  init() {
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x6fb1fc);
+    this.scene.fog = new THREE.FogExp2(0x8ec5fc, 0.0038);
+
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 600);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    document.body.appendChild(this.renderer.domElement);
+
+    this.ambientLight = new THREE.AmbientLight(0xd9e8ff, 0.72);
+    this.scene.add(this.ambientLight);
+
+    this.sunLight = new THREE.DirectionalLight(0xfff4d6, 1.15);
+    this.sunLight.position.set(80, 140, 60);
+    this.sunLight.castShadow = true;
+    this.scene.add(this.sunLight);
+
+    this.buildTerrain();
+    this.buildVillageAndRuins();
+    this.buildFloatingIslands();
+    this.buildPuzzleAndChests();
+    this.spawnInitialEnemies();
+    this.buildWeatherParticles();
+
+    window.addEventListener('resize', () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  },
+
+  buildTerrain() {
+    const geo = new THREE.PlaneGeometry(420, 420, 120, 120);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    const colors = [];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const y = this.getTerrainHeight(x, z);
+      pos.setY(i, y);
+
+      if (Math.hypot(x, z + 145) < 35) {
+        colors.push(0.28, 0.25, 0.38);
+      } else if (y < -0.3) {
+        colors.push(0.76, 0.69, 0.50);
+      } else if (y > 4.2) {
+        colors.push(0.45, 0.48, 0.52);
+      } else {
+        colors.push(0.24 + (y * 0.02), 0.62 + (y * 0.015), 0.28);
+      }
+    }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+
+    const waterGeo = new THREE.PlaneGeometry(420, 420);
+    waterGeo.rotateX(-Math.PI / 2);
+    const waterMat = new THREE.MeshPhongMaterial({
+      color: 0x2996ff, transparent: true, opacity: 0.72, shininess: 90
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.position.y = -0.65;
+    this.scene.add(water);
+
+    for (let i = 0; i < 45; i++) {
+      const angle = (i / 45) * Math.PI * 2;
+      const dist = 35 + (i % 4) * 28;
+      const tx = Math.cos(angle) * dist;
+      const tz = Math.sin(angle) * dist;
+      if (Math.hypot(tx, tz + 145) < 42) continue;
+      this.createStylizedTree(tx, tz);
+    }
+
+    this.createClimbableCliff(26, -32, 8, 14, 8);
+    this.createClimbableCliff(-34, -45, 10, 16, 10);
+    this.createClimbableCliff(0, -102, 12, 10, 8);
+  },
+
+  createStylizedTree(x, z) {
+    const y = this.getTerrainHeight(x, z);
+    if (y < 0) return;
+    const group = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.4, 0.65, 3.5, 7),
+      new THREE.MeshLambertMaterial({ color: 0x6e472b })
+    );
+    trunk.position.y = 1.75;
+    group.add(trunk);
+
+    const crownColor = Math.random() > 0.25 ? 0x38a852 : 0x56c770;
+    const leaves = new THREE.Mesh(
+      new THREE.ConeGeometry(2.8, 5.5, 7),
+      new THREE.MeshLambertMaterial({ color: crownColor })
+    );
+    leaves.position.y = 4.8;
+    group.add(leaves);
+
+    group.position.set(x, y, z);
+    this.scene.add(group);
+  },
+
+  createClimbableCliff(x, z, w, h, d) {
+    const y = this.getTerrainHeight(x, z);
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshLambertMaterial({ color: 0x5c6470 })
+    );
+    mesh.position.set(x, y + h / 2 - 1, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.colliders.push({ x, z, w: w / 2 + 0.6, d: d / 2 + 0.6, topY: y + h - 1 });
+  },
+
+  buildVillageAndRuins() {
+    const houseCoords = [[-14, 10], [15, 12], [-16, -12]];
+    houseCoords.forEach(([hx, hz]) => {
+      const g = new THREE.Group();
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 4.5, 6),
+        new THREE.MeshLambertMaterial({ color: 0xf4ead5 })
+      );
+      base.position.y = 2.25;
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(5.2, 3.5, 4),
+        new THREE.MeshLambertMaterial({ color: 0x3b6998 })
+      );
+      roof.position.y = 6.2;
+      roof.rotation.y = Math.PI / 4;
+      g.add(base, roof);
+      g.position.set(hx, 0, hz);
+      this.scene.add(g);
+    });
+
+    const stone = new THREE.Mesh(
+      new THREE.OctahedronGeometry(1.6, 0),
+      new THREE.MeshPhongMaterial({ color: 0x4de6b0, emissive: 0x19664b })
+    );
+    stone.position.set(0, 2.6, 0);
+    this.scene.add(stone);
+
+    this.createNPC('Lumina (Guide Sprite)', 3, 2, {
+      id: 'lumina', color: 0x277da1, trimColor: 0x8ceeff, hairColor: 0xe0fbfc, eyeColor: 0x3da5ff
+    }, () => Quests.onTalkLumina());
+
+    this.createNPC('Elder Thorne (Aerwyn Chief)', -6, -8, {
+      id: 'elder', color: 0x6c584c, trimColor: 0xe6c670, hairColor: 0xdcdcdc, eyeColor: 0xe6c670
+    }, () => Quests.onTalkElder());
+
+    const pot = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 0.8, 1.0, 12),
+      new THREE.MeshLambertMaterial({ color: 0x2b2d38 })
+    );
+    pot.position.set(7, 0.5, -5);
+    this.scene.add(pot);
+    this.interactables.push({
+      x: 7, z: -5, radius: 3.5, label: 'Cook Repeating Meals',
+      onInteract: () => UI.openModal('inv-modal')
+    });
+  },
+
+  createNPC(name, x, z, styleCfg, callback) {
+    const y = this.getTerrainHeight(x, z);
+    const npcRig = createStylizedCharacterRig(styleCfg);
+    npcRig.applyCharacterTheme(styleCfg);
+    npcRig.root.position.set(x, y, z);
+
+    const questMarker = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.26, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffdd44 })
+    );
+    questMarker.position.y = 2.45;
+    npcRig.root.add(questMarker);
+    this.scene.add(npcRig.root);
+
+    this.interactables.push({
+      x, z, radius: 3.5, label: `Talk to ${name}`, mesh: npcRig.root, marker: questMarker,
+      onInteract: callback
+    });
+  },
+
+  buildFloatingIslands() {
+    const coords = [[0, -55, 24], [-28, -85, 30], [28, -90, 28]];
+    coords.forEach(([ix, iz, iy]) => {
+      const island = new THREE.Mesh(
+        new THREE.ConeGeometry(8, 10, 7),
+        new THREE.MeshLambertMaterial({ color: 0x4b9e58 })
+      );
+      island.rotation.x = Math.PI;
+      island.position.set(ix, iy, iz);
+      this.scene.add(island);
+    });
+  },
+
+  buildPuzzleAndChests() {
+    const torchPositions = [[-9, -46], [9, -46], [0, -58]];
+    torchPositions.forEach(([tx, tz], idx) => {
+      const ty = this.getTerrainHeight(tx, tz);
+      const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.7, 2.5, 8),
+        new THREE.MeshLambertMaterial({ color: 0x7a828f })
+      );
+      pillar.position.set(tx, ty + 1.25, tz);
+      this.scene.add(pillar);
+
+      const flameOrb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.48, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x333942 })
+      );
+      flameOrb.position.set(tx, ty + 2.8, tz);
+      this.scene.add(flameOrb);
+
+      this.interactables.push({
+        x: tx, y: ty + 2.8, z: tz, radius: 3.8, label: `Ignite Ancient Torch #${idx + 1} (Shoot w/ Lyra or Press F)`,
+        lit: false, orb: flameOrb,
+        onInteract() {
+          if (this.lit) return;
+          this.lit = true;
+          this.orb.material.color.setHex(0xff6a3d);
+          this.label = 'Torch Ignited';
+          Sound.sfxSkill('Flame');
+          World.torchesLit++;
+          UI.spawnFloatingText('TORCH IGNITED!', pillar.position, '#ff6a3d');
+          if (World.torchesLit >= 3 && !World.puzzleSolved) {
+            World.puzzleSolved = true;
+            UI.showToast('ANCIENT SEAL BROKEN! Epic Chest Unlocked!');
+            World.spawnChest(0, -51, 'Epic');
+            Quests.onPuzzleSolved();
+          }
+        }
+      });
+    });
+
+    this.spawnChest(26, -32, 'Rare', 13.2);
+    this.spawnChest(-24, 18, 'Common');
+  },
+
+  spawnChest(x, z, rarity = 'Common', customY = null) {
+    const y = customY !== null ? customY : this.getTerrainHeight(x, z);
+    const colors = { Common: 0xa87948, Rare: 0x3da5ff, Epic: 0xc45eff, Legendary: 0xffd700 };
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 1.1, 1.0),
+      new THREE.MeshPhongMaterial({ color: colors[rarity] || 0xffd700, shininess: 60 })
+    );
+    box.position.set(x, y + 0.55, z);
+    this.scene.add(box);
+
+    this.interactables.push({
+      x, z, radius: 3.2, opened: false, label: `Open ${rarity} Chest`,
+      onInteract() {
+        if (this.opened) return;
+        this.opened = true;
+        this.label = 'Opened Chest';
+        box.scale.set(1, 0.4, 1);
+        Sound.sfxChest();
+        Inventory.gold += rarity === 'Legendary' ? 500 : 150;
+        Inventory.materials['Aether Crystal'] += 3;
+        PARTY.forEach(c => c.exp += 60);
+        UI.spawnFloatingText(`+${rarity.toUpperCase()} LOOT!`, box.position, '#ffd700');
+      }
+    });
+  },
+
+  spawnInitialEnemies() {
+    const spots = [
+      { name: 'Tide Slime', el: 'Tide', x: -18, z: -26, hp: 420, color: 0x3da5ff },
+      { name: 'Frost Slime', el: 'Frost', x: 18, z: -30, hp: 420, color: 0x8ceeff },
+      { name: 'Ruin Sentinel (Elite)', el: 'Terra', x: 0, z: -78, hp: 980, color: 0xe6b84d, scale: 1.55 },
+      { name: 'Corrupted Stalker', el: 'Volt', x: -16, z: -72, hp: 560, color: 0xc45eff }
+    ];
+
+    spots.forEach(s => {
+      const y = this.getTerrainHeight(s.x, s.z);
+      const sc = s.scale || 1;
+      const mesh = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.95 * sc, 1),
+        new THREE.MeshPhongMaterial({ color: s.color })
+      );
+      mesh.position.set(s.x, y + sc, s.z);
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+
+      this.enemies.push({
+        name: s.name, element: s.el, aura: s.el,
+        hp: s.hp, maxHp: s.hp, mesh, scale: sc,
+        homeX: s.x, homeZ: s.z, atkTimer: 0, stunTimer: 0
+      });
+    });
+  },
+
+  spawnStormwingBoss() {
+    if (this.boss) return;
+    UI.showToast('BOSS ENCOUNTER: STORMWING SERPENT KORVAX!');
+    document.getElementById('boss-hud').style.display = 'flex';
+
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.OctahedronGeometry(2.6, 1),
+      new THREE.MeshPhongMaterial({ color: 0x9932cc, emissive: 0x3b0954 })
+    );
+    const wingL = new THREE.Mesh(
+      new THREE.BoxGeometry(7.5, 0.35, 2.4),
+      new THREE.MeshPhongMaterial({ color: 0x4de6b0 })
+    );
+    wingL.position.x = -4.5;
+    const wingR = wingL.clone();
+    wingR.position.x = 4.5;
+    group.add(core, wingL, wingR);
+
+    group.position.set(0, 5.5, -145);
+    this.scene.add(group);
+
+    this.boss = {
+      name: 'Stormwing Serpent', element: 'Volt', aura: 'Volt',
+      hp: 3600, maxHp: 3600, phase: 1, scale: 2.6,
+      mesh: group, wingL, wingR, atkTimer: 0, stunTimer: 0
+    };
+    this.enemies.push(this.boss);
+  },
+
+  // --- RANGED 3D PROJECTILE SPAWNER & UPDATER (Arrows & Hydro Orbs) ---
+  spawnProjectile(opts) {
+    const group = new THREE.Group();
+    group.position.copy(opts.origin);
+
+    if (opts.type === 'arrow') {
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, 1.15, 6),
+        new THREE.MeshBasicMaterial({ color: opts.isCharged ? 0xff6a3d : 0xffe699 })
+      );
+      shaft.rotation.x = Math.PI / 2;
+      const head = new THREE.Mesh(
+        new THREE.ConeGeometry(0.08, 0.25, 6),
+        new THREE.MeshBasicMaterial({ color: ELEMENTS[opts.element].hex })
+      );
+      head.rotation.x = Math.PI / 2;
+      head.position.z = 0.6;
+      group.add(shaft, head);
+
+      if (opts.isCharged) {
+        const aura = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff6a3d, transparent: true, opacity: 0.65 })
+        );
+        aura.position.z = 0.5;
+        group.add(aura);
+      }
+    } else {
+      // Mira's Hydro Magic Orb
+      const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.26, 12, 12),
+        new THREE.MeshBasicMaterial({ color: ELEMENTS[opts.element].hex })
+      );
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.36, 0.03, 6, 16),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })
+      );
+      group.add(orb, ring);
+    }
+
+    const targetLook = opts.origin.clone().add(opts.dir);
+    group.lookAt(targetLook);
+    this.scene.add(group);
+
+    this.projectiles.push({
+      mesh: group,
+      pos: opts.origin.clone(),
+      vel: opts.dir.clone().normalize().multiplyScalar(opts.speed || 46),
+      gravity: opts.gravity || 0,
+      dmg: opts.dmg,
+      element: opts.element,
+      aoeRadius: opts.aoeRadius || 1.8,
+      isCharged: opts.isCharged || false,
+      homingTarget: opts.homingTarget || null,
+      life: 3.2
+    });
+  },
+
+  updateProjectiles(dt) {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Gentle homing for Mira's Hydro Orbs
+      if (p.homingTarget && p.homingTarget.hp > 0) {
+        const desired = p.homingTarget.mesh.position.clone().sub(p.pos).normalize().multiplyScalar(p.vel.length());
+        p.vel.lerp(desired, 6 * dt);
+      }
+
+      p.vel.y -= p.gravity * dt;
+      p.pos.addScaledVector(p.vel, dt);
+      p.mesh.position.copy(p.pos);
+      p.mesh.lookAt(p.pos.clone().add(p.vel));
+
+      let hit = false;
+      const groundY = this.getTerrainHeight(p.pos.x, p.pos.z);
+
+      // 1. Check collision against Enemies
+      for (const en of this.enemies) {
+        if (en.hp <= 0) continue;
+        const hitRadius = (en.scale || 1) + 0.9;
+        if (p.pos.distanceTo(en.mesh.position) <= hitRadius) {
+          hit = true;
+          break;
+        }
+      }
+
+      // 2. Check collision against Ancient Flame Puzzle Torches (Bow can ignite from afar!)
+      if (p.element === 'Flame') {
+        for (const it of this.interactables) {
+          if (it.orb && !it.lit) {
+            const torchPos = new THREE.Vector3(it.x, it.y || (this.getTerrainHeight(it.x, it.z) + 2.5), it.z);
+            if (p.pos.distanceTo(torchPos) < 2.2) {
+              it.onInteract();
+              hit = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Check Ground Impact
+      if (p.pos.y <= groundY) {
+        p.pos.y = groundY;
+        hit = true;
+      }
+
+      if (hit) {
+        const tag = p.isCharged ? 'FLAME ARROW!' : '';
+        Player.dealAreaDamage(p.pos, p.aoeRadius, p.dmg, p.element, tag);
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+      }
+    }
+  },
+
+  buildWeatherParticles() {
+    const geo = new THREE.BufferGeometry();
+    const count = 600;
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count * 3; i += 3) {
+      pos[i] = (Math.random() - 0.5) * 120;
+      pos[i + 1] = Math.random() * 45;
+      pos[i + 2] = (Math.random() - 0.5) * 120;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xaad4ff, size: 0.28, transparent: true, opacity: 0.0 });
+    this.rainSystem = new THREE.Points(geo, mat);
+    this.scene.add(this.rainSystem);
+  },
+
+  cycleWeather() {
+    const states = ['Clear', 'Rain', 'Thunderstorm', 'Fog'];
+    this.weather = states[(states.indexOf(this.weather) + 1) % states.length];
+    this.rainSystem.material.opacity = (this.weather === 'Rain' || this.weather === 'Thunderstorm') ? 0.75 : 0.0;
+    this.scene.fog.density = this.weather === 'Fog' ? 0.014 : 0.0038;
+    UI.showToast(`Weather Changed: ${this.weather}`);
+  },
+
+  updateEnvironment(dt) {
+    this.timeOfDay = (this.timeOfDay + dt * 0.08) % 24;
+    const sunAngle = ((this.timeOfDay - 6) / 24) * Math.PI * 2;
+    const sunY = Math.sin(sunAngle);
+    this.sunLight.position.set(Math.cos(sunAngle) * 100, Math.max(10, sunY * 120), 50);
+
+    const skyColor = new THREE.Color();
+    if (sunY > 0.2) skyColor.setHex(0x6fb1fc);
+    else if (sunY > -0.15) skyColor.setHex(0xf78852);
+    else skyColor.setHex(0x0c142c);
+
+    this.scene.background.lerp(skyColor, 0.05);
+    this.scene.fog.color.lerp(skyColor, 0.05);
+    this.sunLight.intensity = Math.max(0.2, sunY * 1.2);
+
+    if (this.rainSystem.material.opacity > 0) {
+      const arr = this.rainSystem.geometry.attributes.position.array;
+      for (let i = 1; i < arr.length; i += 3) {
+        arr[i] -= 28 * dt;
+        if (arr[i] < 0) arr[i] = 42;
+      }
+      this.rainSystem.position.x = Player.pos.x;
+      this.rainSystem.position.z = Player.pos.z;
+      this.rainSystem.geometry.attributes.position.needsUpdate = true;
+    }
+
+    const hrs = Math.floor(this.timeOfDay).toString().padStart(2, '0');
+    const mins = Math.floor((this.timeOfDay % 1) * 60).toString().padStart(2, '0');
+    document.getElementById('time-weather-badge').textContent = `${hrs}:${mins} • ${this.weather}`;
+  }
+};
+
+/* ============================================================================
+   6. PLAYER CONTROLLER (Bow Aiming Mode + Ranged Projectiles + Melee Slash)
+   ============================================================================ */
+const Player = {
+  activeIdx: 0,
+  rig: null,
+  mesh: null,
+  pos: new THREE.Vector3(0, 0, 14),
+  vel: new THREE.Vector3(),
+  yaw: Math.PI, camYaw: 0, camPitch: 0.28,
+  stamina: 100, maxStamina: 100,
+  isGrounded: true, isClimbing: false, isGliding: false,
+  isAiming: false, isDrawingBow: false, bowCharge: 0,
+  keys: {}, mouseDownTime: 0,
+
+  get activeChar() { return PARTY[this.activeIdx]; },
+
+  init() {
+    this.rig = createStylizedCharacterRig(this.activeChar);
+    this.rig.applyCharacterTheme(this.activeChar);
+    this.mesh = this.rig.root;
+    this.mesh.position.copy(this.pos);
+    this.mesh.rotation.y = this.yaw;
+    World.scene.add(this.mesh);
+
+    this.bindControls();
+  },
+
+  bindControls() {
+    window.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      this.keys[k] = true;
+      if (k === '1') this.switchCharacter(0);
+      if (k === '2') this.switchCharacter(1);
+      if (k === '3') this.switchCharacter(2);
+      if (k === '4') this.switchCharacter(3);
+      if (k === 'r') this.toggleAimMode();
+      if (k === 'e') this.useSkill();
+      if (k === 'q') this.useUltimate();
+      if (k === 'f') this.tryInteract();
+      if (k === 'c') UI.openModal('char-modal');
+      if (k === 'i') UI.openModal('inv-modal');
+      if (e.key === 'Escape') UI.closeModals();
+      if (k === ' ') this.handleSpaceJumpOrGlide();
+    });
+    window.addEventListener('keyup', e => this.keys[e.key.toLowerCase()] = false);
+
+    window.addEventListener('mousemove', e => {
+      if (document.pointerLockElement === document.body) {
+        const baseSens = 0.0022 * (document.getElementById('sens-slider').value / 5);
+        const sens = this.isAiming ? baseSens * 0.55 : baseSens;
+        this.camYaw -= e.movementX * sens;
+        this.camPitch = Math.max(-0.55, Math.min(1.15, this.camPitch + e.movementY * sens));
+      }
+    });
+
+    window.addEventListener('mousedown', e => {
+      if (e.target.tagName !== 'CANVAS') return;
+      Sound.init();
+      if (document.pointerLockElement !== document.body) {
+        document.body.requestPointerLock();
+        return;
+      }
+      if (e.button === 2) {
+        // Right-Click holds Bow Aim Mode for Lyra
+        if (this.activeChar.weapon === 'Bow') {
+          this.setAimMode(true);
+        }
+      } else if (e.button === 0) {
+        this.mouseDownTime = performance.now();
+        if (this.activeChar.weapon === 'Bow') {
+          this.isDrawingBow = true;
+          this.bowCharge = 0;
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', e => {
+      if (document.pointerLockElement !== document.body) return;
+      if (e.button === 2 && this.activeChar.weapon === 'Bow') {
+        this.setAimMode(false);
+      } else if (e.button === 0) {
+        const held = performance.now() - this.mouseDownTime;
+        const charged = this.activeChar.weapon === 'Bow' ? (this.bowCharge >= 0.85 || held > 450) : (held > 320);
+        this.isDrawingBow = false;
+        this.performAttack(charged);
+        this.bowCharge = 0;
+      }
+    });
+  },
+
+  toggleAimMode() {
+    if (this.activeChar.weapon !== 'Bow') {
+      UI.showToast('Switch to Lyra [2] to use Bow Aiming Mode!');
+      return;
+    }
+    this.setAimMode(!this.isAiming);
+  },
+
+  setAimMode(enabled) {
+    if (this.activeChar.weapon !== 'Bow') enabled = false;
+    this.isAiming = enabled;
+    document.getElementById('aim-reticle').style.display = enabled ? 'flex' : 'none';
+    if (!enabled) {
+      this.isDrawingBow = false;
+      this.bowCharge = 0;
+    }
+  },
+
+  switchCharacter(idx) {
+    if (idx < 0 || idx >= PARTY.length || idx === this.activeIdx) return;
+    this.setAimMode(false);
+    this.activeIdx = idx;
+    const ch = this.activeChar;
+    this.rig.applyCharacterTheme(ch);
+    Sound.sfxSkill(ch.element);
+    UI.spawnFloatingText(`SWITCH: ${ch.name.toUpperCase()}`, this.pos, ELEMENTS[ch.element].color);
+    UI.refreshPartyHUD();
+  },
+
+  handleSpaceJumpOrGlide() {
+    if (this.isGrounded || this.isClimbing) {
+      this.vel.y = 11.5;
+      this.isGrounded = false;
+      this.isClimbing = false;
+      this.setAimMode(false);
+    } else if (this.vel.y < 0 && this.stamina > 5) {
+      this.isGliding = !this.isGliding;
+      if (this.isGliding) this.setAimMode(false);
+    }
+  },
+
+  findNearestEnemy(maxRange = 34) {
+    let best = null, minD = maxRange;
+    World.enemies.forEach(en => {
+      if (en.hp <= 0) return;
+      const d = en.mesh.position.distanceTo(this.pos);
+      if (d < minD) { best = en; minD = d; }
+    });
+    return best;
+  },
+
+  performAttack(isCharged) {
+    const ch = this.activeChar;
+
+    // Mid-air Plunging Attack
+    if (!this.isGrounded && !this.isAiming && this.pos.y - World.getTerrainHeight(this.pos.x, this.pos.z) > 3.0) {
+      this.isGliding = false;
+      this.vel.y = -24;
+      this.rig.attackStyle = 'melee';
+      this.rig.attackAnim = 1.0;
+      Sound.sfxSlash();
+      this.dealAreaDamage(this.pos, 6.0, ch.atk * 1.8, ch.element, 'PLUNGE ATTACK!');
+      return;
+    }
+
+    // 1. BOW RANGED ATTACK (LYRA — AIMED SHOT OR RAPID AUTO-TARGET SHOT)
+    if (ch.weapon === 'Bow') {
+      this.rig.attackStyle = 'bow';
+      this.rig.attackAnim = 1.0;
+      const flameInfused = isCharged || this.isAiming;
+      Sound.sfxBowLoose(flameInfused);
+
+      const spawnOrigin = this.pos.clone().add(new THREE.Vector3(0, 1.5, 0));
+      let aimDir = new THREE.Vector3();
+
+      if (this.isAiming) {
+        // Shoot directly along the 3D camera crosshair ray
+        World.camera.getWorldDirection(aimDir);
+      } else {
+        // Rapid hip-fire auto-aims at nearest enemy within 32m, or fires straight ahead
+        const target = this.findNearestEnemy(32);
+        if (target) {
+          this.yaw = Math.atan2(target.mesh.position.x - this.pos.x, target.mesh.position.z - this.pos.z);
+          this.mesh.rotation.y = this.yaw;
+          aimDir.subVectors(target.mesh.position, spawnOrigin).normalize();
+        } else {
+          aimDir.set(Math.sin(this.yaw), 0.04, Math.cos(this.yaw)).normalize();
+        }
+      }
+
+      World.spawnProjectile({
+        type: 'arrow',
+        origin: spawnOrigin,
+        dir: aimDir,
+        speed: isCharged ? 62 : 48,
+        gravity: this.isAiming ? 1.5 : 3.5,
+        dmg: isCharged ? ch.atk * 2.15 : ch.atk * 1.15,
+        element: 'Flame',
+        aoeRadius: isCharged ? 4.8 : 1.8,
+        isCharged
+      });
+      return;
+    }
+
+    // 2. MAGIC FOCUS RANGED HYDRO ORB (MIRA)
+    if (ch.weapon === 'Magic Focus') {
+      this.rig.attackStyle = 'magic';
+      this.rig.attackAnim = 1.0;
+      Sound.sfxOrbCast();
+
+      const spawnOrigin = this.pos.clone().add(new THREE.Vector3(0, 1.45, 0));
+      const target = this.findNearestEnemy(28);
+      let aimDir = new THREE.Vector3(Math.sin(this.yaw), 0.02, Math.cos(this.yaw));
+      if (target) {
+        this.yaw = Math.atan2(target.mesh.position.x - this.pos.x, target.mesh.position.z - this.pos.z);
+        this.mesh.rotation.y = this.yaw;
+        aimDir.subVectors(target.mesh.position, spawnOrigin).normalize();
+      }
+
+      World.spawnProjectile({
+        type: 'orb',
+        origin: spawnOrigin,
+        dir: aimDir,
+        speed: 28,
+        gravity: 0,
+        dmg: isCharged ? ch.atk * 1.75 : ch.atk * 1.1,
+        element: 'Tide',
+        aoeRadius: isCharged ? 4.5 : 2.5,
+        isCharged,
+        homingTarget: target
+      });
+      return;
+    }
+
+    // 3. MELEE SWORD / DUAL BLADES (KAEL & RIVEN)
+    this.rig.attackStyle = 'melee';
+    this.rig.attackAnim = 1.0;
+    Sound.sfxSlash();
+
+    // Forward crescent slash offset in front of character
+    const slashCenter = this.pos.clone().add(new THREE.Vector3(Math.sin(this.yaw) * 2.2, 0.8, Math.cos(this.yaw) * 2.2));
+    if (isCharged && this.stamina >= 15) {
+      this.stamina -= 15;
+      this.dealAreaDamage(slashCenter, 4.8, ch.atk * 1.65, ch.element, 'CHARGED SLASH!');
+    } else {
+      this.dealAreaDamage(slashCenter, 3.8, ch.atk, ch.element);
+    }
+  },
+
+  useSkill() {
+    const ch = this.activeChar;
+    if (ch.skillTimer > 0) return;
+    ch.skillTimer = ch.skillCd;
+    ch.energy = Math.min(100, ch.energy + 35);
+    this.rig.attackAnim = 1.0;
+    Sound.sfxSkill(ch.element);
+
+    if (ch.id === 'kael') {
+      this.vel.y = 13.5;
+      this.isGrounded = false;
+      this.dealAreaDamage(this.pos, 6.5, ch.atk * 1.9, 'Gale', 'CYCLONE SLASH!');
+    } else if (ch.id === 'lyra') {
+      // Ranged Solar Volley: Rains a 5-arrow fan ahead or at nearest target
+      const target = this.findNearestEnemy(35);
+      const baseOrigin = this.pos.clone().add(new THREE.Vector3(0, 1.6, 0));
+      let forward = new THREE.Vector3(Math.sin(this.yaw), 0.08, Math.cos(this.yaw));
+      if (this.isAiming) World.camera.getWorldDirection(forward);
+      else if (target) forward.subVectors(target.mesh.position, baseOrigin).normalize();
+
+      for (let i = -2; i <= 2; i++) {
+        const spreadDir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), i * 0.11);
+        World.spawnProjectile({
+          type: 'arrow',
+          origin: baseOrigin,
+          dir: spreadDir,
+          speed: 52,
+          gravity: 2.0,
+          dmg: ch.atk * 1.45,
+          element: 'Flame',
+          aoeRadius: 3.5,
+          isCharged: true
+        });
+      }
+      UI.spawnFloatingText('SOLAR VOLLEY!', this.pos, '#ff6a3d');
+    } else if (ch.id === 'mira') {
+      PARTY.forEach(m => m.hp = Math.min(m.maxHp, m.hp + 340));
+      UI.spawnFloatingText('+340 PARTY HEAL!', this.pos, '#52e675');
+      this.dealAreaDamage(this.pos, 6.0, ch.atk * 1.3, 'Tide', 'TIDAL PULSE!');
+    } else if (ch.id === 'riven') {
+      this.pos.x += Math.sin(this.yaw) * 6.5;
+      this.pos.z += Math.cos(this.yaw) * 6.5;
+      this.dealAreaDamage(this.pos, 5.8, ch.atk * 2.2, 'Volt', 'THUNDER BLINK!');
+    }
+    UI.refreshPartyHUD();
+  },
+
+  useUltimate() {
+    const ch = this.activeChar;
+    if (ch.energy < ch.ultCost) return;
+    ch.energy = 0;
+    this.rig.attackAnim = 1.0;
+    Sound.sfxUlt();
+    UI.spawnFloatingText(`${ch.ultName.toUpperCase()}!`, this.pos, ELEMENTS[ch.element].color);
+
+    if (ch.id === 'lyra') {
+      const target = this.findNearestEnemy(38);
+      const impactCenter = target ? target.mesh.position.clone() : this.pos.clone().add(new THREE.Vector3(Math.sin(this.yaw) * 10, 0, Math.cos(this.yaw) * 10));
+      this.dealAreaDamage(impactCenter, 12.0, ch.atk * 3.8, 'Flame', 'PHOENIX RAIN!');
+    } else {
+      this.dealAreaDamage(this.pos, 11.0, ch.atk * 3.6, ch.element, 'ULTIMATE!');
+    }
+    if (ch.id === 'mira') PARTY.forEach(m => m.hp = m.maxHp);
+    UI.refreshPartyHUD();
+  },
+
+  dealAreaDamage(origin, radius, baseDmg, element, tag = '') {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, radius, 24),
+      new THREE.MeshBasicMaterial({ color: ELEMENTS[element].hex, side: THREE.DoubleSide, transparent: true, opacity: 0.78 })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(origin.x, World.getTerrainHeight(origin.x, origin.z) + 0.35, origin.z);
+    World.scene.add(ring);
+    setTimeout(() => World.scene.remove(ring), 260);
+
+    World.enemies.forEach(en => {
+      if (en.hp <= 0) return;
+      const d = Math.hypot(en.mesh.position.x - origin.x, en.mesh.position.z - origin.z);
+      if (d <= radius + (en.scale || 1)) {
+        let dmg = Math.round(baseDmg * (0.92 + Math.random() * 0.16));
+        const rx = checkElementalReaction(en.aura, element);
+        if (rx) {
+          dmg = Math.round(dmg * rx.mult);
+          en.aura = null;
+          if (rx.stun) en.stunTimer = rx.stun;
+          Sound.sfxReaction();
+          UI.spawnFloatingText(`${rx.name}!`, en.mesh.position, rx.color);
+        } else {
+          en.aura = element;
+        }
+        en.hp -= dmg;
+        UI.spawnFloatingText(`${tag ? tag + ' ' : ''}${dmg}`, en.mesh.position, ELEMENTS[element].color);
+
+        if (en.hp <= 0) {
+          World.scene.remove(en.mesh);
+          Inventory.gold += 80;
+          PARTY.forEach(c => {
+            c.exp += 45;
+            if (c.exp >= 100) { c.level++; c.exp -= 100; c.maxHp += 150; c.hp = c.maxHp; c.atk += 18; }
+          });
+          if (en === World.boss) Quests.onBossDefeated();
+        }
+      }
+    });
+  },
+
+  tryInteract() {
+    let best = null, bestD = 999;
+    World.interactables.forEach(it => {
+      const d = Math.hypot(it.x - this.pos.x, it.z - this.pos.z);
+      if (d < it.radius && d < bestD) { best = it; bestD = d; }
+    });
+    if (best) best.onInteract();
+  },
+
+  update(dt) {
+    PARTY.forEach(c => { if (c.skillTimer > 0) c.skillTimer = Math.max(0, c.skillTimer - dt); });
+
+    // Update Bow Flame Charge while holding Left-Click
+    if (this.activeChar.weapon === 'Bow' && this.isDrawingBow) {
+      this.bowCharge = Math.min(1.0, this.bowCharge + dt * 1.35);
+    }
+
+    let fwd = 0, strafe = 0;
+    if (this.keys['w']) fwd += 1;
+    if (this.keys['s']) fwd -= 1;
+    if (this.keys['a']) strafe -= 1;
+    if (this.keys['d']) strafe += 1;
+
+    const moving = (fwd !== 0 || strafe !== 0);
+    const sprinting = !this.isAiming && moving && this.keys['shift'] && this.stamina > 5;
+    const speed = this.isAiming ? 4.6 : (sprinting ? 14.5 : 8.5);
+
+    let nearCliff = null;
+    for (const c of World.colliders) {
+      if (Math.abs(this.pos.x - c.x) < c.w && Math.abs(this.pos.z - c.z) < c.d && this.pos.y < c.topY) {
+        nearCliff = c;
+        break;
+      }
+    }
+
+    if (nearCliff && fwd > 0 && this.stamina > 2 && !this.isAiming) {
+      this.isClimbing = true;
+      this.isGliding = false;
+      this.vel.y = 5.5;
+      this.stamina = Math.max(0, this.stamina - 14 * dt);
+    } else {
+      this.isClimbing = false;
+    }
+
+    if (moving) {
+      const moveAngle = this.camYaw + Math.atan2(strafe, -fwd);
+      if (!this.isAiming) {
+        this.yaw = moveAngle;
+        this.mesh.rotation.y = this.yaw;
+      }
+      this.pos.x += Math.sin(moveAngle) * speed * dt;
+      this.pos.z += Math.cos(moveAngle) * speed * dt;
+      if (sprinting) this.stamina = Math.max(0, this.stamina - 16 * dt);
+    }
+
+    // When Aiming with Bow, character always faces camera crosshair direction
+    if (this.isAiming) {
+      this.yaw = this.camYaw + Math.PI;
+      this.mesh.rotation.y = this.yaw;
+    }
+
+    if (this.isGliding && !this.isGrounded && this.stamina > 0) {
+      this.vel.y = Math.max(-2.4, this.vel.y - 6 * dt);
+      this.stamina = Math.max(0, this.stamina - 10 * dt);
+      this.rig.glider.visible = true;
+    } else {
+      this.isGliding = false;
+      this.rig.glider.visible = false;
+      if (!this.isClimbing) this.vel.y -= 26 * dt;
+    }
+
+    this.pos.y += this.vel.y * dt;
+
+    let groundY = World.getTerrainHeight(this.pos.x, this.pos.z);
+    for (const c of World.colliders) {
+      if (Math.abs(this.pos.x - c.x) < c.w - 0.3 && Math.abs(this.pos.z - c.z) < c.d - 0.3 && this.pos.y >= c.topY - 0.8) {
+        groundY = Math.max(groundY, c.topY);
+      }
+    }
+
+    if (this.pos.y <= groundY) {
+      this.pos.y = groundY;
+      this.vel.y = 0;
+      this.isGrounded = true;
+      this.isGliding = false;
+    } else {
+      this.isGrounded = false;
+    }
+
+    if (this.isGrounded && !sprinting) {
+      this.stamina = Math.min(this.maxStamina, this.stamina + 24 * dt);
+    }
+
+    this.mesh.position.copy(this.pos);
+
+    this.rig.updateAnimation(dt, {
+      moving,
+      sprinting,
+      isGliding: this.isGliding,
+      isClimbing: this.isClimbing,
+      isAiming: this.isAiming,
+      bowCharge: this.bowCharge,
+      camPitch: this.camPitch
+    });
+
+    // Camera Positioning: Standard Orbit vs Over-the-Shoulder Bow Aim Mode
+    if (this.isAiming) {
+      const rightVec = new THREE.Vector3(Math.cos(this.camYaw), 0, -Math.sin(this.camYaw));
+      const fwdVec = new THREE.Vector3(-Math.sin(this.camYaw) * Math.cos(this.camPitch), -Math.sin(this.camPitch), -Math.cos(this.camYaw) * Math.cos(this.camPitch));
+      const shoulderCamPos = this.pos.clone()
+        .add(new THREE.Vector3(0, 1.72, 0))
+        .addScaledVector(rightVec, 0.72)
+        .addScaledVector(fwdVec, -2.5);
+
+      World.camera.position.lerp(shoulderCamPos, 0.32);
+      const lookTarget = shoulderCamPos.clone().addScaledVector(fwdVec, 45);
+      World.camera.lookAt(lookTarget);
+    } else {
+      const camDist = 8.2;
+      const targetCamX = this.pos.x + Math.sin(this.camYaw) * Math.cos(Math.max(0.05, this.camPitch)) * camDist;
+      const targetCamZ = this.pos.z + Math.cos(this.camYaw) * Math.cos(Math.max(0.05, this.camPitch)) * camDist;
+      const targetCamY = this.pos.y + 1.85 + Math.sin(Math.max(0.05, this.camPitch)) * camDist;
+
+      World.camera.position.lerp(new THREE.Vector3(targetCamX, targetCamY, targetCamZ), 0.2);
+      World.camera.lookAt(this.pos.x, this.pos.y + 1.45, this.pos.z);
+    }
+  }
+};
+
+/* ============================================================================
+   7. ENEMY & MULTI-PHASE STORMWING BOSS AI
+   ============================================================================ */
+function updateEnemies(dt) {
+  World.enemies.forEach(en => {
+    if (en.hp <= 0) return;
+    if (en.stunTimer > 0) {
+      en.stunTimer -= dt;
+      return;
+    }
+
+    const dx = Player.pos.x - en.mesh.position.x;
+    const dz = Player.pos.z - en.mesh.position.z;
+    const dist = Math.hypot(dx, dz);
+
+    if (en === World.boss) {
+      const hpPct = en.hp / en.maxHp;
+      en.phase = hpPct > 0.65 ? 1 : (hpPct > 0.3 ? 2 : 3);
+      const phaseLabels = {
+        1: 'Phase 1: Grounded Tempest',
+        2: 'Phase 2: Skyborne Lightning Barrage (Use Lyra Bow Aim!)',
+        3: 'Phase 3: Cataclysmic Overdrive (Weak Point Exposed)'
+      };
+      document.getElementById('boss-phase-tag').textContent = phaseLabels[en.phase];
+      document.getElementById('boss-hp-fill').style.width = `${Math.max(0, hpPct * 100)}%`;
+
+      en.wingL.rotation.z = Math.sin(performance.now() * 0.008) * 0.35;
+      en.wingR.rotation.z = -en.wingL.rotation.z;
+      const targetAltitude = en.phase === 2 ? 9.5 : 4.2;
+      en.mesh.position.y += (targetAltitude - en.mesh.position.y) * 2 * dt;
+
+      if (dist < 45) {
+        en.mesh.position.x += (dx / dist) * 4.2 * dt;
+        en.mesh.position.z += (dz / dist) * 4.2 * dt;
+        en.atkTimer += dt;
+        const interval = en.phase === 3 ? 2.2 : 3.4;
+        if (en.atkTimer >= interval) {
+          en.atkTimer = 0;
+          spawnTelegraphStrike(Player.pos.clone());
+        }
+      }
+      return;
+    }
+
+    if (dist < 22 && dist > 1.8) {
+      en.mesh.position.x += (dx / dist) * 4.0 * dt;
+      en.mesh.position.z += (dz / dist) * 4.0 * dt;
+      en.mesh.position.y = World.getTerrainHeight(en.mesh.position.x, en.mesh.position.z) + en.scale;
+    }
+    if (dist < 2.8) {
+      en.atkTimer += dt;
+      if (en.atkTimer > 1.6) {
+        en.atkTimer = 0;
+        Player.activeChar.hp = Math.max(1, Player.activeChar.hp - 65);
+        UI.spawnFloatingText('-65', Player.pos, '#ff4d4d');
+      }
+    }
+  });
+}
+
+function spawnTelegraphStrike(targetPos) {
+  const warn = new THREE.Mesh(
+    new THREE.RingGeometry(0.2, 4.5, 24),
+    new THREE.MeshBasicMaterial({ color: 0xff3b5c, side: THREE.DoubleSide, transparent: true, opacity: 0.65 })
+  );
+  warn.rotation.x = -Math.PI / 2;
+  warn.position.set(targetPos.x, World.getTerrainHeight(targetPos.x, targetPos.z) + 0.2, targetPos.z);
+  World.scene.add(warn);
+
+  setTimeout(() => {
+    World.scene.remove(warn);
+    Sound.sfxSkill('Volt');
+    const bolt = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 28, 8),
+      new THREE.MeshBasicMaterial({ color: 0xc45eff })
+    );
+    bolt.position.copy(warn.position);
+    bolt.position.y += 14;
+    World.scene.add(bolt);
+    setTimeout(() => World.scene.remove(bolt), 220);
+
+    if (Math.hypot(Player.pos.x - warn.position.x, Player.pos.z - warn.position.z) < 4.5) {
+      Player.activeChar.hp = Math.max(1, Player.activeChar.hp - 160);
+      UI.spawnFloatingText('-160 LIGHTNING!', Player.pos, '#c45eff');
+    }
+  }, 1150);
+}
+
+/* ============================================================================
+   8. STORY QUEST ENGINE ("The Fallen Star")
+   ============================================================================ */
+const Quests = {
+  step: 0,
+  stages: [
+    { title: 'The Fallen Star', desc: 'Speak with Lumina by the Aerwyn Waystone.', tx: 3, tz: 2 },
+    { title: 'Trial of Elements', desc: 'Speak with Elder Thorne in Aerwyn Village.', tx: -6, tz: -8 },
+    { title: 'Seal of the Ancients', desc: 'Switch to Lyra [2], press [R] to Aim, and shoot the 3 Flame Torches at the Northern Ruins.', tx: 0, tz: -50 },
+    { title: 'Eye of the Tempest', desc: 'Journey north to the Storm Altar and defeat the Stormwing Serpent.', tx: 0, tz: -145 },
+    { title: 'Hero of Elyndra', desc: 'Explore Elyndra freely, collect chests, and level up your party!', tx: 0, tz: 0 }
+  ],
+
+  onTalkLumina() {
+    UI.showDialogue('Lumina (Guide Sprite)',
+      'Thank the stars you are awake! After that dimensional rift tore you from your sibling, we washed ashore in Aerwyn Vale. Speak with Elder Thorne nearby—he knows about the portals appearing across the ruins.',
+      () => { if (this.step === 0) this.advance(1); }
+    );
+  },
+
+  onTalkElder() {
+    UI.showDialogue('Elder Thorne',
+      'Welcome, young traveler. Switch to Lyra [Key 2] and press [R] or hold [Right-Click] to enter Bow Aiming Mode! You can snipe the three Flame Torches at the Northern Ruins from afar to break the seal!',
+      () => { if (this.step <= 1) this.advance(2); }
+    );
+  },
+
+  onPuzzleSolved() {
+    if (this.step <= 2) {
+      this.advance(3);
+      World.spawnStormwingBoss();
+    }
+  },
+
+  onBossDefeated() {
+    document.getElementById('boss-hud').style.display = 'none';
+    UI.showToast('VICTORY! STORMWING SERPENT VANQUISHED!');
+    World.spawnChest(0, -145, 'Legendary', 2.0);
+    this.advance(4);
+  },
+
+  advance(newStep) {
+    this.step = newStep;
+    UI.showToast(`QUEST UPDATED: ${this.stages[this.step].title}`);
+  }
+};
+
+/* ============================================================================
+   9. USER INTERFACE, MINIMAP, RETICLE & SAVE SYSTEM
+   ============================================================================ */
+const UI = {
+  init() {
+    this.refreshPartyHUD();
+    document.getElementById('btn-new-game').onclick = () => this.startGame(false);
+    document.getElementById('btn-continue').onclick = () => this.startGame(true);
+    document.getElementById('btn-settings-menu').onclick = () => this.openModal('settings-modal');
+    document.getElementById('btn-credits').onclick = () => alert('CHRONICLES OF ELYNDRA\nOriginal 3D WebGL Action-RPG Vertical Slice\nFeaturing Bow Aiming Mode, Ranged Projectiles & Articulated Anime Rigs.');
+    document.getElementById('vol-slider').oninput = e => Sound.volume = e.target.value / 100;
+  },
+
+  startGame(loadSaved) {
+    Sound.init();
+    if (loadSaved) GameSave.load();
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+    document.body.requestPointerLock();
+  },
+
+  refreshPartyHUD() {
+    const bar = document.getElementById('party-bar');
+    bar.innerHTML = '';
+    PARTY.forEach((ch, i) => {
+      const slot = document.createElement('div');
+      slot.className = `hud-panel party-slot ${i === Player.activeIdx ? 'active' : ''}`;
+      slot.onclick = () => Player.switchCharacter(i);
+      const hpPct = Math.round((ch.hp / ch.maxHp) * 100);
+      slot.innerHTML = `
+        <div class="avatar-circle" style="background:${ELEMENTS[ch.element].color}">${ch.name[0]}</div>
+        <div class="char-info">
+          <div class="char-name-row"><span>${ch.name}</span><span style="color:var(--gold)">[${i+1}]</span></div>
+          <div style="font-size:11px; color:#9ab0c7;">${ch.element} &bull; ${ch.weapon}</div>
+          <div class="mini-hp-bg"><div class="mini-hp-fill" style="width:${hpPct}%"></div></div>
+        </div>
+      `;
+      bar.appendChild(slot);
+    });
+
+    // Show/Hide dedicated Bow Aim button when Lyra is active
+    document.getElementById('btn-aim-toggle').style.display = (Player.activeChar.weapon === 'Bow') ? 'flex' : 'none';
+  },
+
+  updateHUD() {
+    const ch = Player.activeChar;
+    document.getElementById('active-char-banner').textContent = `${ch.name} • Lv. ${ch.level} (${ch.element} ${ch.weapon})`;
+    document.getElementById('hp-bar-fill').style.width = `${(ch.hp / ch.maxHp) * 100}%`;
+    document.getElementById('hp-bar-text').textContent = `${ch.hp} / ${ch.maxHp}`;
+    document.getElementById('stamina-fill').style.width = `${(Player.stamina / Player.maxStamina) * 100}%`;
+
+    // Update Bow Aiming Reticle Charge Visuals
+    if (Player.isAiming) {
+      const chargeEl = document.getElementById('reticle-charge');
+      const ringEl = document.getElementById('reticle-ring');
+      const lbl = document.getElementById('aim-status-lbl');
+      chargeEl.style.opacity = Player.bowCharge > 0.05 ? '1' : '0';
+      chargeEl.style.transform = `scale(${1.35 - Player.bowCharge * 0.55})`;
+      ringEl.style.borderColor = Player.bowCharge >= 0.85 ? '#ff6a3d' : 'rgba(255,255,255,0.65)';
+      lbl.textContent = Player.bowCharge >= 0.85 ? 'FLAME ARROW CHARGED!' : 'HOLD LMB TO CHARGE';
+    }
+
+    document.getElementById('skill-name-lbl').textContent = ch.element;
+    const skCd = document.getElementById('skill-cd');
+    if (ch.skillTimer > 0) {
+      skCd.style.display = 'flex';
+      skCd.textContent = ch.skillTimer.toFixed(1);
+    } else skCd.style.display = 'none';
+
+    const ultCd = document.getElementById('ult-cd');
+    if (ch.energy < ch.ultCost) {
+      ultCd.style.display = 'flex';
+      ultCd.textContent = `${ch.energy}%`;
+    } else ultCd.style.display = 'none';
+
+    const q = Quests.stages[Quests.step];
+    document.getElementById('quest-title').textContent = q.title;
+    document.getElementById('quest-desc').textContent = q.desc;
+    const qDist = Math.round(Math.hypot(Player.pos.x - q.tx, Player.pos.z - q.tz));
+    document.getElementById('quest-dist').textContent = `Target Distance: ${qDist}m`;
+
+    if (Math.hypot(Player.pos.x, Player.pos.z + 145) < 42 && !World.boss) {
+      World.spawnStormwingBoss();
+    }
+
+    let nearest = null, minD = 999;
+    World.interactables.forEach(it => {
+      const d = Math.hypot(it.x - Player.pos.x, it.z - Player.pos.z);
+      if (d < it.radius && d < minD) { nearest = it; minD = d; }
+    });
+    const promptEl = document.getElementById('interact-prompt');
+    if (nearest) {
+      promptEl.style.display = 'flex';
+      document.getElementById('interact-label').textContent = nearest.label;
+    } else promptEl.style.display = 'none';
+
+    this.drawMinimap();
+  },
+
+  drawMinimap() {
+    const cvs = document.getElementById('minimap-canvas');
+    const ctx = cvs.getContext('2d');
+    ctx.fillStyle = '#0f1b2d';
+    ctx.fillRect(0, 0, 150, 150);
+
+    const scale = 0.85;
+    const cx = 75, cy = 75;
+
+    const q = Quests.stages[Quests.step];
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(cx + (q.tx - Player.pos.x) * scale, cy + (q.tz - Player.pos.z) * scale, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ff4d4d';
+    World.enemies.forEach(en => {
+      if (en.hp <= 0) return;
+      ctx.beginPath();
+      ctx.arc(cx + (en.mesh.position.x - Player.pos.x) * scale, cy + (en.mesh.position.z - Player.pos.z) * scale, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.fillStyle = '#4de6b0';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  },
+
+  spawnFloatingText(text, worldPos, color = '#fff') {
+    const v = worldPos.clone();
+    v.y += 1.9;
+    v.project(World.camera);
+    if (v.z > 1) return;
+    const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-(v.y * 0.5) + 0.5) * window.innerHeight;
+
+    const el = document.createElement('div');
+    el.className = 'float-txt';
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.style.color = color;
+    el.textContent = text;
+    document.getElementById('floating-layer').appendChild(el);
+    setTimeout(() => el.remove(), 1000);
+  },
+
+  showToast(msg) {
+    const t = document.getElementById('toast-banner');
+    t.textContent = msg;
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 3200);
+  },
+
+  showDialogue(speaker, text, onDone) {
+    document.exitPointerLock();
+    const box = document.getElementById('dialogue-box');
+    document.getElementById('speaker-name').textContent = speaker;
+    document.getElementById('dialogue-text').textContent = text;
+    box.style.display = 'block';
+    document.getElementById('dialogue-next').onclick = () => {
+      box.style.display = 'none';
+      document.body.requestPointerLock();
+      if (onDone) onDone();
+    };
+  },
+
+  openModal(id) {
+    document.exitPointerLock();
+    this.closeModals(false);
+    if (id === 'char-modal') this.renderCharModal();
+    if (id === 'inv-modal') this.renderInvModal();
+    document.getElementById(id).style.display = 'flex';
+  },
+
+  closeModals(relock = true) {
+    document.querySelectorAll('.modal-backdrop').forEach(m => m.style.display = 'none');
+    if (relock && document.getElementById('main-menu').style.display === 'none') {
+      document.body.requestPointerLock();
+    }
+  },
+
+  renderCharModal() {
+    const box = document.getElementById('char-modal-content');
+    box.innerHTML = '';
+    PARTY.forEach((ch, idx) => {
+      const card = document.createElement('div');
+      card.className = 'card-item';
+      card.innerHTML = `
+        <div>
+          <div style="font-weight:800; color:${ELEMENTS[ch.element].color}">${ch.name} (Lv. ${ch.level})</div>
+          <div style="font-size:12px; color:#b0c4de;">${ch.role} &bull; ${ch.weapon} &bull; ATK: ${ch.atk} &bull; HP: ${ch.maxHp}</div>
+          <div style="font-size:11px; color:var(--gold); margin-top:4px;">Skill: ${ch.skillName} | Ult: ${ch.ultName}</div>
+        </div>
+        <button class="action-btn" onclick="UI.ascendChar(${idx})">Ascend (1 Crystal)</button>
+      `;
+      box.appendChild(card);
+    });
+  },
+
+  ascendChar(idx) {
+    if (Inventory.materials['Aether Crystal'] <= 0) {
+      alert('Need more Aether Crystals from Chests!');
+      return;
+    }
+    Inventory.materials['Aether Crystal']--;
+    const ch = PARTY[idx];
+    ch.level++;
+    ch.maxHp += 180;
+    ch.hp = ch.maxHp;
+    ch.atk += 24;
+    Sound.sfxChest();
+    this.renderCharModal();
+    this.refreshPartyHUD();
+  },
+
+  renderInvModal() {
+    const box = document.getElementById('inv-modal-content');
+    box.innerHTML = `
+      <div class="card-item">
+        <span><b>Gold Coins:</b> ${Inventory.gold}</span>
+        <span><b>Aether Crystals:</b> ${Inventory.materials['Aether Crystal']}</span>
+      </div>
+      <div class="card-item">
+        <span><b>Cook Roasted Skewer</b> (Uses 1 Raw Meat)</span>
+        <button class="action-btn" onclick="UI.cookMeal()">Cook Meal</button>
+      </div>
+      <div class="card-item">
+        <span><b>Eat Roasted Skewer</b> (Stock: ${Inventory.meals['Roasted Skewer (+350 HP)']})</span>
+        <button class="action-btn" onclick="UI.eatMeal()">Restore +350 HP</button>
+      </div>
+      <div class="card-item">
+        <span><b>Equipped Weapons:</b> 3D Signature Weapons Active</span>
+        <span style="color:var(--gold)">Equipped</span>
+      </div>
+    `;
+  },
+
+  cookMeal() {
+    if (Inventory.materials['Raw Meat'] <= 0) return alert('Out of Raw Meat!');
+    Inventory.materials['Raw Meat']--;
+    Inventory.meals['Roasted Skewer (+350 HP)']++;
+    Sound.sfxSkill('Flame');
+    this.renderInvModal();
+  },
+
+  eatMeal() {
+    if (Inventory.meals['Roasted Skewer (+350 HP)'] <= 0) return;
+    Inventory.meals['Roasted Skewer (+350 HP)']--;
+    Player.activeChar.hp = Math.min(Player.activeChar.maxHp, Player.activeChar.hp + 350);
+    Sound.sfxReaction();
+    this.renderInvModal();
+    this.refreshPartyHUD();
+  }
+};
+
+const GameSave = {
+  save(notify = false) {
+    const data = {
+      pos: { x: Player.pos.x, y: Player.pos.y, z: Player.pos.z },
+      questStep: Quests.step,
+      gold: Inventory.gold,
+      party: PARTY.map(c => ({ level: c.level, hp: c.hp, maxHp: c.maxHp, atk: c.atk }))
+    };
+    localStorage.setItem('elyndra_save_v1', JSON.stringify(data));
+    if (notify) UI.showToast('GAME PROGRESS SAVED');
+  },
+  load() {
+    const raw = localStorage.getItem('elyndra_save_v1');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    Player.pos.set(data.pos.x, data.pos.y, data.pos.z);
+    Quests.step = data.questStep || 0;
+    Inventory.gold = data.gold || 500;
+    if (data.party) {
+      data.party.forEach((saved, i) => Object.assign(PARTY[i], saved));
+    }
+    UI.refreshPartyHUD();
+    UI.showToast('SAVED GAME LOADED');
+  }
+};
+
+/* ============================================================================
+   10. MAIN GAME LOOP INITIALIZATION
+   ============================================================================ */
+window.addEventListener('DOMContentLoaded', () => {
+  World.init();
+  Player.init();
+  UI.init();
+
+  let lastTime = performance.now();
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    World.updateEnvironment(dt);
+    if (document.getElementById('main-menu').style.display === 'none') {
+      Player.update(dt);
+      World.updateProjectiles(dt);
+      updateEnemies(dt);
+      UI.updateHUD();
+    } else {
+      const t = now * 0.00025;
+      World.camera.position.set(Math.cos(t) * 38, 16, Math.sin(t) * 38);
+      World.camera.lookAt(0, 4, -20);
+    }
+
+    World.renderer.render(World.scene, World.camera);
+  }
+  requestAnimationFrame(animate);
+});
+</script>
+</body>
+</html>
